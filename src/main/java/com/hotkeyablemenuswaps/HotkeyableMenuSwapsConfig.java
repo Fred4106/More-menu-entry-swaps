@@ -139,6 +139,17 @@ public interface HotkeyableMenuSwapsConfig extends Config
 		return "";
 	}
 
+	@ConfigItem(
+		keyName = "customShiftHides",
+		name = "Custom hides (shift)",
+		description = "Options to remove from the menu when shift is held.",
+		section = customHidesSection,
+		position = 2
+	)
+	default String customShiftHides() {
+		return "";
+	}
+
 	@ConfigSection(name = "Custom swap instructions", description = "instructions", position = -7, closedByDefault = true)
 	String customSwapInstructions = "Custom swap instructions";
 

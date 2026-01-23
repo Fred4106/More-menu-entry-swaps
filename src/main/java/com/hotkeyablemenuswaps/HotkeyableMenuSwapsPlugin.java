@@ -127,6 +127,7 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 	final List<CustomSwap>[] customHotkeySwaps = new List[HOTKEY_COUNT];
 	final List<CustomSwap> customShiftSwaps = new ArrayList<>();
 	final List<CustomSwap> customHides = new ArrayList<>();
+	final List<CustomSwap> customShiftHides = new ArrayList<>();
 
 	private static final int HOTKEY_COUNT = 40;
 	private long hotkeys = 0; // bitfield.
@@ -1253,6 +1254,9 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 
 		customHides.clear();
 		customHides.addAll(loadCustomSwaps(config.customHides()));
+
+		customShiftHides.clear();
+		customShiftHides.addAll(loadCustomSwaps(config.customShiftHides()));
 	}
 
 	private Collection<? extends CustomSwap> loadCustomSwaps(String customSwaps)
@@ -1540,7 +1544,8 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 
 			String option = Text.standardize(entry.getOption());
 			String target = Text.standardize(entry.getTarget());
-			if (matches(option, target, topEntryOption, topEntryTarget, customHides, menuIterator) == -1 || isProtected(entry))
+			List<CustomSwap> hides = shiftModifier() ? customShiftHides : customHides;
+			if (matches(option, target, topEntryOption, topEntryTarget, hides, menuIterator) == -1 || isProtected(entry))
 			{
 				entryList.add(entry);
 			}
