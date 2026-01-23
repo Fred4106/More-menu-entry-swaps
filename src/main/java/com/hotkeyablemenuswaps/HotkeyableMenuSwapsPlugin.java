@@ -74,6 +74,7 @@ import net.runelite.api.gameval.InterfaceID;
 import static net.runelite.api.gameval.InterfaceID.*;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetUtil;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.config.Keybind;
 import net.runelite.client.config.RuneLiteConfig;
@@ -114,6 +115,7 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 	@Inject private GroundItemsStuff groundItemsStuff;
 	@Inject private EventBus eventBus;
 	@Inject private RunepouchUtils runepouchUtils;
+	@Inject private ClientThread clientThread;
 
 	// If a hotkey corresponding to a swap is currently held, these variables will be non-null. currentBankModeSwap is an exception because it uses menu entry swapper's bank swap enum, which already has an "off" value.
 	// These variables do not factor in left-click swaps.
@@ -160,8 +162,7 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 
 		keyManager.registerKeyListener(this);
 
-		eventBus.register(runepouchUtils);
-		runepouchUtils.startUp();
+		clientThread.invoke(runepouchUtils::startUp);
 
 		examineCancelLateRemoval = config.examineCancelLateRemoval();
 
@@ -198,7 +199,6 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 	@Override
 	protected void shutDown() {
 		keyManager.unregisterKeyListener(this);
-		eventBus.unregister(runepouchUtils);
 		groundItemsStuff.reloadGroundItemPluginLists(false, false, false, false);
 	}
 
@@ -1595,32 +1595,34 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 
 	private boolean isProtected(MenuEntry entry)
 	{
-		MenuAction type = entry.getType();
-		if (type == WIDGET_TARGET_ON_PLAYER || type == WIDGET_TARGET_ON_NPC) {
-			if (WidgetUtil.componentToInterface(client.getSelectedWidget().getId()) == MAGIC_SPELLBOOK) {
-				return true;
-			}
-		}
-		if (mayNotBeLeftClick(entry)) {
-			return true;
-		}
-		return false;
+//		MenuAction type = entry.getType();
+//		if (type == WIDGET_TARGET_ON_PLAYER || type == WIDGET_TARGET_ON_NPC) {
+//			if (WidgetUtil.componentToInterface(client.getSelectedWidget().getId()) == MAGIC_SPELLBOOK) {
+//				return true;
+//			}
+//		}
+//		if (mayNotBeLeftClick(entry)) {
+//			return true;
+//		}
+//		return false;
+
+		return mayNotBeLeftClick(entry);
 	}
 
 	private boolean mayNotBeLeftClick(MenuEntry entry)
 	{
 		MenuAction type = entry.getType();
-		if (type.getId() >= PLAYER_FIRST_OPTION.getId() && type.getId() <= PLAYER_EIGHTH_OPTION.getId()) {
-			return true;
-		}
-		if (type == MenuAction.NPC_FOURTH_OPTION || type == MenuAction.NPC_FIFTH_OPTION) {
-			if (entry.getNpc() != null) {
-				String[] actions = entry.getNpc().getTransformedComposition().getActions();
-				if ("Lure".equals(actions[3]) || "Knock-out".equals(actions[4])) {
-					return true;
-				}
-			}
-		}
+//		if (type.getId() >= PLAYER_FIRST_OPTION.getId() && type.getId() <= PLAYER_EIGHTH_OPTION.getId()) {
+//			return true;
+//		}
+//		if (type == MenuAction.NPC_FOURTH_OPTION || type == MenuAction.NPC_FIFTH_OPTION) {
+//			if (entry.getNpc() != null) {
+//				String[] actions = entry.getNpc().getTransformedComposition().getActions();
+//				if ("Lure".equals(actions[3]) || "Knock-out".equals(actions[4])) {
+//					return true;
+//				}
+//			}
+//		}
 		return false;
 	}
 
