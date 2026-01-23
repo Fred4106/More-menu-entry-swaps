@@ -55,7 +55,9 @@ import lombok.ToString;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.InventoryID;
 import net.runelite.api.ItemComposition;
+import net.runelite.api.ItemContainer;
 import net.runelite.api.KeyCode;
 import net.runelite.api.Menu;
 import net.runelite.api.MenuAction;
@@ -68,12 +70,14 @@ import net.runelite.api.events.MenuOpened;
 import net.runelite.api.events.PostMenuSort;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.widgets.ComponentID;
-import net.runelite.api.widgets.InterfaceID;
+import net.runelite.api.gameval.InterfaceID;
+import static net.runelite.api.gameval.InterfaceID.*;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetUtil;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.config.Keybind;
 import net.runelite.client.config.RuneLiteConfig;
+import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.events.ProfileChanged;
@@ -108,6 +112,8 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 	@Inject private MenuEntrySwapperConfig menuEntrySwapperConfig;
 	@Inject private ItemManager itemManager;
 	@Inject private GroundItemsStuff groundItemsStuff;
+	@Inject private EventBus eventBus;
+	@Inject private RunepouchUtils runepouchUtils;
 
 	// If a hotkey corresponding to a swap is currently held, these variables will be non-null. currentBankModeSwap is an exception because it uses menu entry swapper's bank swap enum, which already has an "off" value.
 	// These variables do not factor in left-click swaps.
@@ -154,6 +160,9 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 
 		keyManager.registerKeyListener(this);
 
+		eventBus.register(runepouchUtils);
+		runepouchUtils.startUp();
+
 		examineCancelLateRemoval = config.examineCancelLateRemoval();
 
 		swapContains("venerate", "altar of the occult"::equals, "standard", () -> getCurrentOccultAltarSwap() == OccultAltarSwap.STANDARD);
@@ -189,6 +198,7 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 	@Override
 	protected void shutDown() {
 		keyManager.unregisterKeyListener(this);
+		eventBus.unregister(runepouchUtils);
 		groundItemsStuff.reloadGroundItemPluginLists(false, false, false, false);
 	}
 
@@ -212,6 +222,14 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 			}
 		}
 		configManager.setConfiguration("hotkeyablemenuswaps", "serialVersion", 2);
+
+		String customSwapperInstructionsText = config.customSwapperInstructions();
+		if (!Boolean.parseBoolean(configManager.getConfiguration("hotkeyablemenuswaps", "updatedInstructions"))) {
+			if (!customSwapperInstructionsText.contains("https://github.com/geheur/More-menu-entry-swaps/wiki/Custom-swaps")) { // maybe someone added notes for their own use?
+				configManager.setConfiguration("hotkeyablemenuswaps", "customSwapperInstructions", "https://github.com/geheur/More-menu-entry-swaps/wiki/Custom-swaps\n\n" + customSwapperInstructionsText);
+			}
+			configManager.setConfiguration("hotkeyablemenuswaps", "updatedInstructions", true);
+		}
 	}
 
 	private OccultAltarSwap getCurrentOccultAltarSwap() {
@@ -564,16 +582,12 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 	private boolean swapBank(MenuEntry menuEntry, BankSwapMode mode)
 	{
 		MenuAction type = menuEntry.getType();
-		if (type != MenuAction.CC_OP)
+		if (type != CC_OP && type != CC_OP_LOW_PRIORITY)
 		{
 			return false;
 		}
 
-		final int widgetGroupId = WidgetUtil.componentToInterface(menuEntry.getParam1());
-		final boolean isDepositBoxPlayerInventory = widgetGroupId == InterfaceID.DEPOSIT_BOX;
-		final boolean isChambersOfXericStorageUnitPlayerInventory = widgetGroupId == InterfaceID.CHAMBERS_OF_XERIC_INVENTORY;
-		final boolean isGroupStoragePlayerInventory = widgetGroupId == InterfaceID.GROUP_STORAGE_INVENTORY;
-		final boolean isPriceChecker = widgetGroupId == InterfaceID.GUIDE_PRICES_INVENTORY || widgetGroupId == InterfaceID.GUIDE_PRICES;
+		int wid = WidgetUtil.componentToInterface(menuEntry.getParam1());
 		// Deposit- op 1 is the current withdraw amount 1/5/10/x for deposit box interface and chambers of xeric storage unit.
 		// Deposit- op 2 is the current withdraw amount 1/5/10/x for bank interface
 		if (
@@ -582,15 +596,18 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 					|| menuEntry.getOption().startsWith("Store")
 					|| menuEntry.getOption().startsWith("Donate")
 					|| menuEntry.getOption().endsWith("-slot")
-					|| (isPriceChecker && menuEntry.getOption().startsWith("Add")))
+					|| (wid == GE_PRICECHECKER_SIDE && menuEntry.getOption().startsWith("Add")))
 		) {
-			final int opId = isDepositBoxPlayerInventory ? mode.getDepositIdentifierDepositBox()
-				: isChambersOfXericStorageUnitPlayerInventory ? mode.getDepositIdentifierChambersStorageUnit()
-				: isGroupStoragePlayerInventory ? mode.getDepositIdentifierGroupStorage()
-				: widgetGroupId == InterfaceID.SEED_VAULT_INVENTORY ? mode.getIdentifierSeedVault()
-				: isPriceChecker ? mode.getPriceCheckerIdentifier()
-				: mode.getDepositIdentifier();
-			bankModeSwap(opId);
+			if (wid == SAILING_BOAT_CARGOHOLD_SIDE || wid == FARMING_TOOLS_SIDE || wid == GE_PRICECHECKER_SIDE) {
+				bankModeSwapText(mode);
+			} else {
+				int opId = wid == BANK_DEPOSITBOX ? mode.getDepositIdentifierDepositBox()
+					: wid == RAIDS_STORAGE_SIDE ? mode.getDepositIdentifierChambersStorageUnit()
+					: wid == SHARED_BANK_SIDE ? mode.getDepositIdentifierGroupStorage()
+					: wid == SEED_VAULT_DEPOSIT ? mode.getIdentifierSeedVault()
+					: mode.getDepositIdentifier();
+				bankModeSwap(opId);
+			}
 			return true;
 		}
 
@@ -598,15 +615,21 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 		if (mode != BankSwapMode.SWAP_EXTRA_OP) {
 			int opId = -1;
 			if (menuEntry.getOption().startsWith("Withdraw")) {
-				if (widgetGroupId == InterfaceID.CHAMBERS_OF_XERIC_STORAGE_UNIT_PRIVATE || widgetGroupId == InterfaceID.CHAMBERS_OF_XERIC_STORAGE_UNIT_SHARED) {
+				if (wid == RAIDS_STORAGE_PRIVATE || wid == RAIDS_STORAGE_SHARED) {
 					opId = mode.getWithdrawIdentifierChambersStorageUnit();
-				} else if (widgetGroupId == InterfaceID.SEED_VAULT) {
+				} else if (wid == InterfaceID.SEED_VAULT) {
 					opId = mode.getIdentifierSeedVault();
-				} else if (widgetGroupId == InterfaceID.BANK || widgetGroupId == InterfaceID.GROUP_STORAGE) {
+				} else if (wid == BANKMAIN || wid == SHARED_BANK) {
 					opId = mode.getWithdrawIdentifier();
+				} else if (wid == SAILING_BOAT_CARGOHOLD) {
+					bankModeSwapText(mode);
+					return true;
 				}
-			} else if (isPriceChecker && menuEntry.getOption().startsWith("Remove")) {
-				opId = mode.getPriceCheckerIdentifier();
+			} else if (menuEntry.getOption().startsWith("Remove")) {
+				if (wid == GE_PRICECHECKER || wid == FARMING_TOOLS) {
+					bankModeSwapText(mode);
+					return true;
+				}
 			}
 
 			if (opId != -1)
@@ -631,7 +654,52 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 			if (entry.getIdentifier() == entryIdentifier)
 			{
 				// Raise the priority of the op so it doesn't get sorted later
-				entry.setType(MenuAction.CC_OP);
+				entry.setType(CC_OP);
+
+				menuEntries[i] = menuEntries[menuEntries.length - 1];
+				menuEntries[menuEntries.length - 1] = entry;
+
+				client.setMenuEntries(menuEntries);
+				break;
+			}
+		}
+	}
+
+	private void bankModeSwapText(BankSwapMode mode)
+	{
+		MenuEntry[] menuEntries = client.getMenuEntries();
+
+		for (int i = menuEntries.length - 1; i >= 0; --i)
+		{
+			MenuEntry entry = menuEntries[i];
+			String option = Text.removeTags(entry.getOption());
+
+			boolean found = false;
+			switch (mode) {
+				case SWAP_ALL_BUT_1: // must be before swap-1;
+					if (option.matches(".*All-but-1$")) found = true;
+					break;
+				case SWAP_1:
+					if (option.matches(".*[^\\d]1$")) found = true;
+					break;
+				case SWAP_5:
+					if (option.matches(".*[^\\d]5$")) found = true;
+					break;
+				case SWAP_10:
+					if (option.matches(".*[^\\d]10$")) found = true;
+					break;
+				case SWAP_X:
+				case SWAP_SET_X:
+					if (option.matches(".*X$")) found = true;
+					break;
+				case SWAP_ALL:
+					if (option.matches(".*All$")) found = true;
+					break;
+			}
+			if (found)
+			{
+				// Raise the priority of the op so it doesn't get sorted later
+				entry.setType(CC_OP);
 
 				menuEntries[i] = menuEntries[menuEntries.length - 1];
 				menuEntries[menuEntries.length - 1] = entry;
@@ -811,12 +879,57 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 		}
 		if (groundItemBlockStart != -1) {
 			groundItemEntries.sort(Comparator.comparingInt(e -> e.value));
+			// If a Player's inventory is full, then we should re-sort the items if we can take any of them
+			if (config.stackablesWhenFull()) {
+				sortStackablesWhenFull(groundItemEntries);
+			}
+
 			for (int j = 0; j < groundItemEntries.size(); j++) {
 				// log.debug("Sorted ground item: {} with value {}", itemManager.getItemComposition(groundItemEntries.get(j).entry.getIdentifier()).getName(), groundItemEntries.get(j).value);
 				menuEntries[groundItemBlockStart + j] = groundItemEntries.get(j).entry;
 			}
 		}
 		client.setMenuEntries(menuEntries);
+	}
+
+	private void sortStackablesWhenFull(List<MenuEntryWithValue> groundItemEntries)
+	{
+		ItemContainer inventory = client.getItemContainer(InventoryID.INVENTORY);
+		boolean isInventoryFull = inventory.count() == 28;
+		if (isInventoryFull) {
+			boolean hasRunePouch = runepouchUtils.inventoryContainsRunePouch(inventory);
+			boolean isRunePickingEnabled = client.getVarbitValue(5698) == 1;
+			boolean checkRunePouch = hasRunePouch && isRunePickingEnabled;
+			groundItemEntries.sort((a, b) -> {
+				// Sort conditions should be the following (Knowing the list has already been sorted by price earlier):
+				// 1. Filter the sort to only include items that are in the player's inventory and it's stackable
+				// 2. If the both of the item are stackable, then sort by the value of the items
+
+				int aItemID = a.entry.getIdentifier();
+				int bItemID = b.entry.getIdentifier();
+				ItemComposition aItemComp = itemManager.getItemComposition(aItemID);
+				ItemComposition bItemComp = itemManager.getItemComposition(bItemID);
+
+				boolean aSort = false;
+				if (aItemComp.isStackable()) {
+					aSort = inventory.contains(aItemID);
+					if (!aSort && checkRunePouch && runepouchUtils.isItemARune(aItemID)) {
+						int quantity = getGroundItemFromScene(a.entry).getQuantity();
+						aSort |= runepouchUtils.canStoreItemInRunePouch(aItemID, quantity);
+					}
+				}
+				boolean bSort = false;
+				if (bItemComp.isStackable()) {
+					bSort = inventory.contains(bItemID);
+					if (!bSort && checkRunePouch && runepouchUtils.isItemARune(bItemID)) {
+						int quantity = getGroundItemFromScene(b.entry).getQuantity();
+						bSort |= runepouchUtils.canStoreItemInRunePouch(bItemID, quantity);
+					}
+				}
+
+				return Boolean.compare(aSort, bSort);
+			});
+		}
 	}
 
 	private int getValue(MenuEntry menuEntry)
@@ -1323,7 +1436,7 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 				// the client will open the right-click menu on left-click if the entry at the top is a CC_OP_LOW_PRIORITY.
 				if (entryToSwap.getType() == MenuAction.CC_OP_LOW_PRIORITY)
 				{
-					entryToSwap.setType(MenuAction.CC_OP);
+					entryToSwap.setType(CC_OP);
 				}
 
 				if (submenuIndex != -1) {
@@ -1484,7 +1597,7 @@ public class HotkeyableMenuSwapsPlugin extends Plugin implements KeyListener
 	{
 		MenuAction type = entry.getType();
 		if (type == WIDGET_TARGET_ON_PLAYER || type == WIDGET_TARGET_ON_NPC) {
-			if (WidgetUtil.componentToInterface(client.getSelectedWidget().getId()) == InterfaceID.SPELLBOOK) {
+			if (WidgetUtil.componentToInterface(client.getSelectedWidget().getId()) == MAGIC_SPELLBOOK) {
 				return true;
 			}
 		}

@@ -19,7 +19,11 @@ public interface HotkeyableMenuSwapsConfig extends Config
 	@ConfigItem(
 		keyName = "customSwaps",
 		name = "Custom swaps",
-		description = "Options to swap to the top.",
+		description = "Options to swap to the top. Each goes on its own line, separated by a newline (the enter key).\n" +
+		"Some examples:\n" +
+		"attack,bloodveld*\n" +
+		"use,cannonball -> dwarf multicannon\n" +
+		"More details available from the link under \"Instructions\"",
 		section = customSwapsSection,
 		position = 0
 	)
@@ -156,7 +160,7 @@ public interface HotkeyableMenuSwapsConfig extends Config
 	@ConfigItem(
 		keyName = "customSwapperInstructions",
 		name = "Instructions",
-		description = "Options to swap to the top.",
+		description = "",
 		section = customSwapInstructions,
 		position = 2
 	)
@@ -233,6 +237,17 @@ public interface HotkeyableMenuSwapsConfig extends Config
 	)
 	default GroundItemPriceSortMode groundItemsPriceSortMode() {
 		return GroundItemPriceSortMode.DISABLED;
+	}
+
+	@ConfigItem(
+		keyName = "stackablesWhenFull",
+		name = "Stackables when full",
+		description = "Prioritize stackable items already in your inventory when your inventory is full",
+		section = groundItemSortSection,
+		position = 4
+	)
+	default boolean stackablesWhenFull() {
+		return false;
 	}
 
 	@ConfigSection(name = "Bank", description = "Swap menu entries in the bank, deposit box, seed vault, price checker interface, and chambers storage unit.", position = 0, closedByDefault = true)
