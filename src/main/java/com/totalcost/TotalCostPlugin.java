@@ -70,7 +70,7 @@ public class TotalCostPlugin extends Plugin
 	@Subscribe
 	public void onChatMessage(ChatMessage chatMessage)
 	{
-		if (chatMessage.getMessage().contains("coins") && chatMessage.getType() == ChatMessageType.GAMEMESSAGE)
+		if (chatMessage.getMessage().contains("coins") && chatMessage.getType() == ChatMessageType.GAMEMESSAGE && item.getName() != null)
 		{
 			try
 			{
